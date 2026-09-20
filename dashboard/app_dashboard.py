@@ -219,11 +219,27 @@ with col_texto:
 
 with col_grafico:
     fig = px.scatter(agg, x="nota", y="engagement", text="genre", color="genre",
+                     size="titulos", size_max=35,  # tamaño de burbuja = cantidad de títulos
                      color_discrete_map={g: (ACCENT if g == mejor.genre else GRIS) for g in agg.genre},
                      hover_data={"genre": False, "titulos": ":,", "nota": ":.2f", "engagement": ":.1f"})
-    fig.update_traces(textposition="top center", marker=dict(size=11))
-    estilo_minimo(fig, "Nota vs. engagement por género")
+    fig.update_traces(textposition="top center", marker=dict(opacity=0.8, line=dict(width=0)))
+    estilo_minimo(fig, "Matriz estratégica: nota vs. engagement por género")
     fig.update_xaxes(title="Nota promedio").update_yaxes(title="Índice de engagement")
+
+    # Matriz de cuadrantes: líneas en el promedio de los géneros graficados
+    prom_nota, prom_eng = agg.nota.mean(), agg.engagement.mean()
+    fig.add_vline(x=prom_nota, line_dash="dash", line_color="#4D4D4D", line_width=1)
+    fig.add_hline(y=prom_eng, line_dash="dash", line_color="#4D4D4D", line_width=1)
+
+    # Nombres de cuadrantes en las esquinas del área del gráfico (coordenadas relativas)
+    for texto, x, y, xa, ya in [
+        ("ESTRELLAS", 0.99, 0.99, "right", "top"),
+        ("JOYAS OCULTAS", 0.99, 0.01, "right", "bottom"),
+        ("ALTO TRÁFICO", 0.01, 0.99, "left", "top"),
+        ("REVISAR", 0.01, 0.01, "left", "bottom"),
+    ]:
+        fig.add_annotation(text=texto, x=x, y=y, xref="paper", yref="paper", xanchor=xa, yanchor=ya,
+                           showarrow=False, font=dict(size=12, color="#8C8C8C"))
     st.plotly_chart(fig, width="stretch")
 
 # ---------------------------------------------------------------- 3. Nota por idioma
