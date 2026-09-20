@@ -3,7 +3,11 @@ pandas>=2.3
 numpy>=2.0
 
 # Gráficos interactivos (EDA y dashboard)
-plotly>=5.24
+plotly>=6.1.1
+
+# Exportación de gráficos a PNG (fig.write_image en el EDA).
+# Kaleido 1.x requiere Plotly >= 6.1 y tener Google Chrome instalado.
+kaleido>=1.0
 
 # Dashboard web
 streamlit>=1.50
