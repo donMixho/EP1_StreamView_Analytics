@@ -1,0 +1,12 @@
+# Procesamiento de datos (EDA y dashboard)
+pandas>=2.3
+numpy>=2.0
+
+# Gráficos interactivos (EDA y dashboard)
+plotly>=5.24
+
+# Dashboard web
+streamlit>=1.50
+
+# Kernel para ejecutar el notebook en VS Code / Jupyter
+ipykernel>=6.29
