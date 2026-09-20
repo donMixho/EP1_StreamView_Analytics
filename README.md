@@ -18,6 +18,13 @@ El proyecto tiene dos partes:
 
 **Hallazgos del EDA:** el género con más títulos (Drama) no es el mejor valorado; las series tienen mejor nota, pero las películas concentran mucho más engagement (mediana de votos); y el inglés domina el catálogo sin ser el idioma mejor valorado (lidera el japonés).
 
+## Índice
+
+- [Características del Dashboard](#características-del-dashboard)
+- [Estructura del Proyecto](#estructura-del-proyecto)
+- [Decisiones de Diseño y Limitaciones de Datos](#decisiones-de-diseño-y-limitaciones-de-datos)
+- [Instalación y Ejecución](#instalación-y-ejecución)
+
 ## Características del Dashboard
 
 - **KPIs con deltas dinámicos:** Total de títulos, Nota promedio y Mediana de votos. Cada KPI muestra su variación (con flecha verde o roja) frente al catálogo completo y se recalcula con los filtros.
@@ -97,3 +104,9 @@ Streamlit abrirá el dashboard en `http://localhost:8501`.
 **3. (Opcional) Ejecutar el EDA**
 
 Abre `notebooks/01_EDA_StreamView.ipynb` en VS Code o Jupyter y ejecuta la sección "Hallazgos clave". **El script del EDA autogenera la evidencia gráfica en la carpeta `images/`** (por ejemplo `eda_hallazgo1_volumen.png`, `eda_hallazgo2_engagement.png` y `eda_hallazgo3_idiomas.png`); no hace falta guardar los gráficos a mano.
+
+## Autores / Integrantes
+
+- Leandro Ruiz
+- Miguel Tropa
+- Año: 2026
