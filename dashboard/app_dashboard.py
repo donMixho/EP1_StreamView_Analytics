@@ -89,7 +89,9 @@ def cargar_datos():
     df = pd.concat([movies, shows], ignore_index=True)
 
     df = df.drop_duplicates(["show_id", "type"])
-    df = df.drop(columns=["rating", "duration", "budget", "revenue"])
+    # 'duration' se conserva (formato distinto por tipo: minutos en películas, "X Seasons" en series)
+    # para el comparador de formatos al final del dashboard.
+    df = df.drop(columns=["rating", "budget", "revenue"])
     df["date_added"] = pd.to_datetime(df["date_added"], errors="coerce")
     for c in ["genres", "country", "language"]:
         df[c] = df[c].fillna("Unknown")
@@ -117,12 +119,19 @@ else:
 
 st.sidebar.header("Filtros")
 tipo = st.sidebar.radio("Tipo de contenido", ["Ambos", "Películas", "Series"])
-top_n = st.sidebar.slider("Top N géneros a visualizar", min_value=5, max_value=20, value=10)
 
 # Filtro temporal por año de lanzamiento (release_year), no por date_added (ver README)
 anio_min, anio_max = int(df.release_year.min()), int(df.release_year.max())
 rango_anios = st.sidebar.slider("Año de lanzamiento", min_value=anio_min, max_value=anio_max,
                                 value=(anio_min, anio_max))
+
+# Lista de géneros del catálogo completo (independiente de los filtros de arriba)
+lista_generos = sorted(explotar_generos(df).genre.unique())
+generos_seleccionados = st.sidebar.multiselect("Comparar Géneros (Opcional)", lista_generos)
+
+# El Top N deja de tener sentido si ya se eligieron géneros específicos: se oculta
+if not generos_seleccionados:
+    top_n = st.sidebar.slider("Top N géneros a visualizar", min_value=5, max_value=20, value=10)
 
 if tipo == "Películas":
     dff = df[df.type == "Movie"]
@@ -138,18 +147,35 @@ if dff.empty:
     st.stop()
 
 generos = explotar_generos(dff)
+if generos_seleccionados:
+    # El multiselect manda: solo esos géneros, sin importar el Top N
+    generos = generos[generos.genre.isin(generos_seleccionados)]
 
 # Tablas de apoyo (usadas en los tres gráficos y en sus narrativas)
-vol = generos.genre.value_counts().head(top_n).sort_values()
-agg = (generos.groupby("genre")
-       .agg(titulos=("title", "count"), nota=("vote_average", "mean"), engagement=("engagement", "mean"))
-       .query("titulos >= 30")
-       .sort_values("titulos", ascending=False)
-       .head(top_n)
-       .reset_index())
-if agg.empty:
-    st.warning("No hay géneros con suficientes títulos para los filtros seleccionados.")
-    st.stop()
+if generos_seleccionados:
+    vol = generos.genre.value_counts().sort_values()
+    agg = (generos.groupby("genre")
+           .agg(titulos=("title", "count"), nota=("vote_average", "mean"), engagement=("engagement", "mean"))
+           .sort_values("titulos", ascending=False)
+           .reset_index())
+else:
+    vol = generos.genre.value_counts().head(top_n).sort_values()
+    agg = (generos.groupby("genre")
+           .agg(titulos=("title", "count"), nota=("vote_average", "mean"), engagement=("engagement", "mean"))
+           .query("titulos >= 30")
+           .sort_values("titulos", ascending=False)
+           .head(top_n)
+           .reset_index())
+
+# Los géneros elegidos pueden no tener títulos bajo el filtro actual de Tipo/Año (p. ej. un género de
+# solo series con "Tipo de contenido" = Películas). Se avisa sin detener el resto del dashboard: el
+# comparador de formatos (sección 4) es independiente y sigue funcionando.
+sin_datos_genero = vol.empty or agg.empty
+if sin_datos_genero:
+    st.warning("Los géneros seleccionados no tienen títulos con los filtros de Tipo de contenido y Año "
+               "actuales. Ajusta esos filtros o la selección de géneros para ver los gráficos 1 y 2."
+               if generos_seleccionados else
+               "No hay géneros con suficientes títulos para los filtros seleccionados.")
 
 idiomas = (dff.groupby("language")
            .agg(titulos=("title", "count"), nota=("vote_average", "mean"))
@@ -181,73 +207,79 @@ st.caption("Solo se consideran títulos con al menos un voto. Engagement = log(1
 
 # ---------------------------------------------------------------- 1. Volumen por género
 subtitulo("1. ¿Dónde está el", "volumen", " del catálogo?")
-col_texto, col_grafico = st.columns([1, 2])
 
-lider, n_lider = vol.idxmax(), vol.max()
-share = n_lider / len(dff)
-mejor_nota = agg.loc[agg.nota.idxmax()]
+if not sin_datos_genero:
+    col_texto, col_grafico = st.columns([1, 2])
 
-with col_texto:
-    txt = (f"{resaltar(lider, share < 0.4)} lidera el catálogo con {n_lider:,} títulos, presente en "
-           f"{resaltar(f'{share:.0%}', share < 0.4)} de la oferta. ")
-    txt += ("Esta concentración es un " + resaltar("punto de atención", False) +
-            ": la oferta depende de un solo género. " if share >= 0.4
-            else "La oferta está razonablemente diversificada. ")
-    if mejor_nota.genre != lider:
-        txt += (f"En calidad, en cambio, destaca {resaltar(mejor_nota.genre)} con nota "
-                f"{resaltar(f'{mejor_nota.nota:.2f}')}: mayor volumen no implica mejor valoración.")
-    narrativa(txt)
+    lider, n_lider = vol.idxmax(), vol.max()
+    share = n_lider / len(dff)
+    mejor_nota = agg.loc[agg.nota.idxmax()]
 
-with col_grafico:
-    fig = px.bar(vol, orientation="h")
-    fig.update_traces(marker_color=colores(vol.index, lider),
-                      hovertemplate="%{y}: %{x:,} títulos<extra></extra>")
-    estilo_minimo(fig, f"Los {top_n} géneros con más títulos", height=max(360, 30 * top_n + 100))
-    fig.update_xaxes(title="Títulos").update_yaxes(title="")
-    st.plotly_chart(fig, width="stretch")
+    with col_texto:
+        txt = (f"{resaltar(lider, share < 0.4)} lidera el catálogo con {n_lider:,} títulos, presente en "
+               f"{resaltar(f'{share:.0%}', share < 0.4)} de la oferta. ")
+        txt += ("Esta concentración es un " + resaltar("punto de atención", False) +
+                ": la oferta depende de un solo género. " if share >= 0.4
+                else "La oferta está razonablemente diversificada. ")
+        if mejor_nota.genre != lider:
+            txt += (f"En calidad, en cambio, destaca {resaltar(mejor_nota.genre)} con nota "
+                    f"{resaltar(f'{mejor_nota.nota:.2f}')}: mayor volumen no implica mejor valoración.")
+        narrativa(txt)
+
+    with col_grafico:
+        titulo_g1 = ("Géneros seleccionados, por títulos" if generos_seleccionados
+                     else f"Los {top_n} géneros con más títulos")
+        fig = px.bar(vol, orientation="h")
+        fig.update_traces(marker_color=colores(vol.index, lider),
+                          hovertemplate="%{y}: %{x:,} títulos<extra></extra>")
+        estilo_minimo(fig, titulo_g1, height=max(360, 30 * len(vol) + 100))
+        fig.update_xaxes(title="Títulos").update_yaxes(title="")
+        st.plotly_chart(fig, width="stretch")
 
 # ---------------------------------------------------------------- 2. Nota vs. engagement
 subtitulo("2. ¿Qué géneros generan más", "engagement", "?")
-col_texto, col_grafico = st.columns([1, 2])
 
-mejor = agg.loc[agg.engagement.idxmax()]
-peor = agg.loc[agg.nota.idxmin()]
+if not sin_datos_genero:
+    col_texto, col_grafico = st.columns([1, 2])
 
-with col_texto:
-    txt = (f"{resaltar(mejor.genre)} combina la mejor respuesta de audiencia, con un índice de engagement "
-           f"de {resaltar(f'{mejor.engagement:.1f}')} y nota {mejor.nota:.2f}. ")
-    if peor.genre != mejor.genre:
-        bajo = peor.nota < dff.vote_average.mean()  # rojo solo si está bajo el promedio de la vista
-        txt += (f"En el otro extremo, {resaltar(peor.genre, not bajo)} tiene la nota más baja "
-                f"({resaltar(f'{peor.nota:.2f}', not bajo)}) entre los géneros mostrados")
-        txt += (": está bajo el promedio, así que conviene revisar la inversión antes de ampliarlo."
-                if bajo else ", aun así sobre el promedio general: no representa un problema de calidad.")
-    narrativa(txt)
+    mejor = agg.loc[agg.engagement.idxmax()]
+    peor = agg.loc[agg.nota.idxmin()]
 
-with col_grafico:
-    fig = px.scatter(agg, x="nota", y="engagement", text="genre", color="genre",
-                     size="titulos", size_max=35,  # tamaño de burbuja = cantidad de títulos
-                     color_discrete_map={g: (ACCENT if g == mejor.genre else GRIS) for g in agg.genre},
-                     hover_data={"genre": False, "titulos": ":,", "nota": ":.2f", "engagement": ":.1f"})
-    fig.update_traces(textposition="top center", marker=dict(opacity=0.8, line=dict(width=0)))
-    estilo_minimo(fig, "Matriz estratégica: nota vs. engagement por género")
-    fig.update_xaxes(title="Nota promedio").update_yaxes(title="Índice de engagement")
+    with col_texto:
+        txt = (f"{resaltar(mejor.genre)} combina la mejor respuesta de audiencia, con un índice de engagement "
+               f"de {resaltar(f'{mejor.engagement:.1f}')} y nota {mejor.nota:.2f}. ")
+        if peor.genre != mejor.genre:
+            bajo = peor.nota < dff.vote_average.mean()  # rojo solo si está bajo el promedio de la vista
+            txt += (f"En el otro extremo, {resaltar(peor.genre, not bajo)} tiene la nota más baja "
+                    f"({resaltar(f'{peor.nota:.2f}', not bajo)}) entre los géneros mostrados")
+            txt += (": está bajo el promedio, así que conviene revisar la inversión antes de ampliarlo."
+                    if bajo else ", aun así sobre el promedio general: no representa un problema de calidad.")
+        narrativa(txt)
 
-    # Matriz de cuadrantes: líneas en el promedio de los géneros graficados
-    prom_nota, prom_eng = agg.nota.mean(), agg.engagement.mean()
-    fig.add_vline(x=prom_nota, line_dash="dash", line_color="#4D4D4D", line_width=1)
-    fig.add_hline(y=prom_eng, line_dash="dash", line_color="#4D4D4D", line_width=1)
+    with col_grafico:
+        fig = px.scatter(agg, x="nota", y="engagement", text="genre", color="genre",
+                         size="titulos", size_max=35,  # tamaño de burbuja = cantidad de títulos
+                         color_discrete_map={g: (ACCENT if g == mejor.genre else GRIS) for g in agg.genre},
+                         hover_data={"genre": False, "titulos": ":,", "nota": ":.2f", "engagement": ":.1f"})
+        fig.update_traces(textposition="top center", marker=dict(opacity=0.8, line=dict(width=0)))
+        estilo_minimo(fig, "Matriz estratégica: nota vs. engagement por género")
+        fig.update_xaxes(title="Nota promedio").update_yaxes(title="Índice de engagement")
 
-    # Nombres de cuadrantes en las esquinas del área del gráfico (coordenadas relativas)
-    for texto, x, y, xa, ya in [
-        ("ESTRELLAS", 0.99, 0.99, "right", "top"),
-        ("JOYAS OCULTAS", 0.99, 0.01, "right", "bottom"),
-        ("ALTO TRÁFICO", 0.01, 0.99, "left", "top"),
-        ("REVISAR", 0.01, 0.01, "left", "bottom"),
-    ]:
-        fig.add_annotation(text=texto, x=x, y=y, xref="paper", yref="paper", xanchor=xa, yanchor=ya,
-                           showarrow=False, font=dict(size=12, color="#8C8C8C"))
-    st.plotly_chart(fig, width="stretch")
+        # Matriz de cuadrantes: líneas en el promedio de los géneros graficados
+        prom_nota, prom_eng = agg.nota.mean(), agg.engagement.mean()
+        fig.add_vline(x=prom_nota, line_dash="dash", line_color="#4D4D4D", line_width=1)
+        fig.add_hline(y=prom_eng, line_dash="dash", line_color="#4D4D4D", line_width=1)
+
+        # Nombres de cuadrantes en las esquinas del área del gráfico (coordenadas relativas)
+        for texto, x, y, xa, ya in [
+            ("ESTRELLAS", 0.99, 0.99, "right", "top"),
+            ("JOYAS OCULTAS", 0.99, 0.01, "right", "bottom"),
+            ("ALTO TRÁFICO", 0.01, 0.99, "left", "top"),
+            ("REVISAR", 0.01, 0.01, "left", "bottom"),
+        ]:
+            fig.add_annotation(text=texto, x=x, y=y, xref="paper", yref="paper", xanchor=xa, yanchor=ya,
+                               showarrow=False, font=dict(size=12, color="#8C8C8C"))
+        st.plotly_chart(fig, width="stretch")
 
 # ---------------------------------------------------------------- 3. Nota por idioma
 subtitulo("3. ¿Qué", "idiomas", " conviene adquirir?")
@@ -284,3 +316,55 @@ with col_grafico:
         estilo_minimo(fig, "Nota promedio por idioma (≥300 títulos)")
         fig.update_xaxes(title="Nota promedio", range=[5, 8]).update_yaxes(title="")
         st.plotly_chart(fig, width="stretch")
+
+# ---------------------------------------------------------------- 4. Comparador de formatos (opcional)
+if generos_seleccionados:
+    st.divider()
+    st.subheader("🔍 Análisis Profundo: Comparativa de Formatos")
+    st.caption(f"Géneros seleccionados: {', '.join(generos_seleccionados)}. "
+               "Usa el catálogo completo del rango de años elegido, sin importar el filtro de Tipo de "
+               "contenido, para poder comparar Películas y Series lado a lado.")
+
+    # Respeta el filtro de año; ignora el de Tipo de contenido (aquí ambos formatos son el punto)
+    base = df[df.release_year.between(*rango_anios)]
+
+    def tiene_genero(genres_str):
+        return any(g in genres_str.split(", ") for g in generos_seleccionados)
+
+    df_comparador = base[base.genres.apply(tiene_genero)]
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**🎬 Películas**")
+        pelis = df_comparador[df_comparador.type == "Movie"]
+        try:
+            duracion_prom = pelis["duration"].astype(str).str.extract(r"(\d+)")[0].astype(float).mean()
+        except (ValueError, TypeError, AttributeError):
+            duracion_prom = np.nan
+
+        if pelis.empty:
+            st.info("No hay películas para estos géneros en el rango de años seleccionado.")
+        else:
+            st.metric("Duración Promedio (Minutos)",
+                      f"{duracion_prom:.0f} min" if pd.notna(duracion_prom) else "Sin datos")
+            st.metric("Engagement Total (Votos)", f"{pelis['vote_count'].sum():,}")
+
+    with col2:
+        st.markdown("**📺 Series**")
+        series = df_comparador[df_comparador.type == "TV Show"]
+        try:
+            temporadas_prom = series["duration"].astype(str).str.extract(r"(\d+)")[0].astype(float).mean()
+        except (ValueError, TypeError, AttributeError):
+            temporadas_prom = np.nan
+
+        if series.empty:
+            st.info("No hay series para estos géneros en el rango de años seleccionado.")
+        else:
+            st.metric("Promedio de Temporadas",
+                      f"{temporadas_prom:.1f}" if pd.notna(temporadas_prom) else "Sin datos")
+            st.metric("Engagement Total (Votos)", f"{series['vote_count'].sum():,}")
+
+    if not pelis.empty and pd.isna(duracion_prom):
+        st.caption("⚠️ La columna `duration` no tiene datos de minutos para ninguna película del dataset "
+                   "(viene 100% vacía en el archivo fuente); por eso esa métrica muestra \"Sin datos\".")
