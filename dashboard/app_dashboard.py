@@ -119,12 +119,19 @@ st.sidebar.header("Filtros")
 tipo = st.sidebar.radio("Tipo de contenido", ["Ambos", "Películas", "Series"])
 top_n = st.sidebar.slider("Top N géneros a visualizar", min_value=5, max_value=20, value=10)
 
+# Filtro temporal por año de lanzamiento (release_year), no por date_added (ver README)
+anio_min, anio_max = int(df.release_year.min()), int(df.release_year.max())
+rango_anios = st.sidebar.slider("Año de lanzamiento", min_value=anio_min, max_value=anio_max,
+                                value=(anio_min, anio_max))
+
 if tipo == "Películas":
     dff = df[df.type == "Movie"]
 elif tipo == "Series":
     dff = df[df.type == "TV Show"]
 else:
     dff = df
+
+dff = dff[dff.release_year.between(*rango_anios)]
 
 if dff.empty:
     st.warning("No hay datos para los filtros seleccionados.")

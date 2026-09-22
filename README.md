@@ -28,7 +28,7 @@ El proyecto tiene dos partes:
 ## Características del Dashboard
 
 - **KPIs con deltas dinámicos:** Total de títulos, Nota promedio y Mediana de votos. Cada KPI muestra su variación (con flecha verde o roja) frente al catálogo completo y se recalcula con los filtros.
-- **Filtros en la barra lateral:** Tipo de contenido (Películas, Series o Ambos) y Top N géneros. Actualizan toda la vista.
+- **Filtros en la barra lateral:** Tipo de contenido (Películas, Series o Ambos), Top N géneros y rango de Año de lanzamiento (`release_year`). Actualizan toda la vista.
 - **Data Storytelling:** cada gráfico tiene la narrativa a la izquierda y la visualización a la derecha. El texto integra cifras dinámicas en verde (insight positivo) o rojo (punto de atención), según los datos filtrados.
 - **Matriz Estratégica interactiva:** gráfico de burbujas de nota promedio (eje X) contra engagement (eje Y), con el tamaño de cada burbuja según la cantidad de títulos del género. Dos líneas de promedio dividen el gráfico en cuatro cuadrantes: **Estrellas**, **Joyas ocultas**, **Alto tráfico** y **Revisar**. Solo el género destacado va en rojo.
 - **Diseño minimalista:** gráficos sin grillas ni bordes superior/derecho, en tonos de gris con un único color de acento (#E50914) para el hallazgo principal.
@@ -55,15 +55,15 @@ P1_StreamView/
 
 ## Decisiones de Diseño y Limitaciones de Datos
 
-### Por qué no hay filtros de fecha (mes/año)
+### Filtro temporal: `release_year`, no `date_added`
 
 Durante el EDA se detectó una **anomalía de calidad de datos en la columna `date_added`**:
 
 - En el **100% de los registros** el año de `date_added` es idéntico a `release_year`. Una fecha real de incorporación al catálogo casi nunca coincide siempre con el año de estreno.
-- La distribución es **perfectamente uniforme**: exactamente 1.000 películas y 1.000 series por cada año entre 2010 y 2025 (2.000 títulos por año). Un catálogo real crece de forma irregular.
+- La distribución es **perfectamente uniforme**: exactamente 1.000 películas y 1.000 series por cada año entre 2010 y 2025 (2.000 títulos por año, en bloques exactos). Un catálogo real crece de forma irregular.
 - Por lo tanto, `date_added` no registra cuándo entró el título al catálogo, y el dataset es una muestra balanceada por año y tipo, no el catálogo completo.
 
-Un filtro por mes o año sobre esa columna mostraría una tendencia artificial y llevaría a conclusiones falsas sobre el crecimiento del catálogo. Limitar los filtros a **"Tipo de contenido"** y **"Top N géneros"** protege la integridad del análisis y minimiza la carga cognitiva del usuario ejecutivo: solo se ofrecen cortes sobre variables confiables.
+Un filtro basado en `date_added` mostraría una tendencia artificial y llevaría a conclusiones falsas sobre el crecimiento del catálogo, así que se descartó. En su lugar, el dashboard implementa el filtro temporal sobre **`release_year` (Año de lanzamiento)**, que sí es un dato de contenido genuino del título y no presenta esas inconsistencias. Esto permite a los ejecutivos analizar el catálogo por épocas (por ejemplo, clásicos vs. contemporáneos) manteniendo la integridad de los datos, sin depender de la columna defectuosa.
 
 ### Exclusión de valoraciones en 0 (títulos sin votos)
 
